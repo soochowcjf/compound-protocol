@@ -248,6 +248,7 @@ contract CTokenInterface is CTokenStorage {
 }
 
 contract CErc20Storage {
+//    标的资产
     /**
      * @notice Underlying asset for this CToken
      */

@@ -13,6 +13,7 @@ import "./InterestRateModel.sol";
  * @author Compound
  */
 contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
+//    由代理合约调过来
     /**
      * @notice Initialize the money market
      * @param comptroller_ The address of the Comptroller
@@ -31,6 +32,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         require(msg.sender == admin, "only admin may initialize the market");
         require(accrualBlockNumber == 0 && borrowIndex == 0, "market may only be initialized once");
 
+//        设置初始汇率
         // Set initial exchange rate
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(initialExchangeRateMantissa > 0, "initial exchange rate must be greater than zero.");
@@ -39,10 +41,13 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint err = _setComptroller(comptroller_);
         require(err == uint(Error.NO_ERROR), "setting comptroller failed");
 
+//        最后产生利息的区块号
         // Initialize block number and borrow index (block number mocks depend on comptroller being set)
         accrualBlockNumber = getBlockNumber();
+//        1e18
         borrowIndex = mantissaOne;
 
+//        设置新的利率模型
         // Set the interest rate model (depends on block number / borrow index)
         err = _setInterestRateModelFresh(interestRateModel_);
         require(err == uint(Error.NO_ERROR), "setting interest rate model failed");
@@ -382,8 +387,10 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      *   up to the current block and writes new checkpoint to storage.
      */
     function accrueInterest() public returns (uint) {
+//        当前区块号
         /* Remember the initial block number */
         uint currentBlockNumber = getBlockNumber();
+//        最后产生利息的区块号
         uint accrualBlockNumberPrior = accrualBlockNumber;
 
         /* Short-circuit accumulating 0 interest */
@@ -391,12 +398,17 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return uint(Error.NO_ERROR);
         }
 
+//        获取[这个合约地址]中[标的资产]的token数量
         /* Read the previous values out of storage */
         uint cashPrior = getCashPrior();
+//        该市场标的未偿还借款总数
         uint borrowsPrior = totalBorrows;
+//        该市场持有的标的物的储备总额
         uint reservesPrior = totalReserves;
+//        借款指数（用于跟踪利息累积）
         uint borrowIndexPrior = borrowIndex;
 
+//        根据利率模型算出当前时刻的区块利率
         /* Calculate the current borrow interest rate */
         uint borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior);
         require(borrowRateMantissa <= borrowRateMaxMantissa, "borrow rate is absurdly high");
@@ -420,6 +432,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint totalReservesNew;
         uint borrowIndexNew;
 
+//        计算从上次计息到当前时刻的区间利率，时间上就是 borrowRateMantissa*blockDelta
         (mathErr, simpleInterestFactor) = mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_SIMPLE_INTEREST_FACTOR_CALCULATION_FAILED, uint(mathErr));

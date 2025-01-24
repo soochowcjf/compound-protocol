@@ -42,6 +42,7 @@ contract BaseJumpRateModelV2 {
      */
     uint public kink;
 
+//    y = k2*(x - p) + (k*p + b)
     /**
      * @notice Construct an interest rate model
      * @param baseRatePerYear The approximate target base APR, as a mantissa (scaled by 1e18)
@@ -93,11 +94,15 @@ contract BaseJumpRateModelV2 {
      * @return The borrow rate percentage per block as a mantissa (scaled by 1e18)
      */
     function getBorrowRateInternal(uint cash, uint borrows, uint reserves) internal view returns (uint) {
+        // 计算资金利用率
         uint util = utilizationRate(cash, borrows, reserves);
 
+        // 如果资金利用率小于拐点
         if (util <= kink) {
+            // 直接是y=kx+b
             return util.mul(multiplierPerBlock).div(1e18).add(baseRatePerBlock);
         } else {
+            // 如果资金利用率大于拐点，y = k2*(x - p) + (k*p + b)
             uint normalRate = kink.mul(multiplierPerBlock).div(1e18).add(baseRatePerBlock);
             uint excessUtil = util.sub(kink);
             return excessUtil.mul(jumpMultiplierPerBlock).div(1e18).add(normalRate);

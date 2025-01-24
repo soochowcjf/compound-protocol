@@ -3,7 +3,10 @@ pragma solidity ^0.5.16;
 import "./BaseJumpRateModelV2.sol";
 import "./InterestRateModel.sol";
 
-
+// y = k2*(x - p) + (k*p + b)
+//其中，k2 表示拐点后的直线的斜率，p 则表示拐点的 x 轴的值。
+//因此，需要初始化的参数有 4 个：b、k、k2、p，分别对应了构造函数中的几个入参：baseRatePerYear、multiplierPerYear、jumpMultiplierPerYear、kink
+//
 /**
   * @title Compound's JumpRateModel Contract V2 for V2 cTokens
   * @author Arr00
@@ -22,6 +25,6 @@ contract JumpRateModelV2 is InterestRateModel, BaseJumpRateModelV2  {
         return getBorrowRateInternal(cash, borrows, reserves);
     }
 
-    constructor(uint baseRatePerYear, uint multiplierPerYear, uint jumpMultiplierPerYear, uint kink_, address owner_) 
+    constructor(uint baseRatePerYear, uint multiplierPerYear, uint jumpMultiplierPerYear, uint kink_, address owner_)
     	BaseJumpRateModelV2(baseRatePerYear,multiplierPerYear,jumpMultiplierPerYear,kink_,owner_) public {}
 }

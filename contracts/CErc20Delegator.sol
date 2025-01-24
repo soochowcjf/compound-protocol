@@ -2,6 +2,7 @@ pragma solidity ^0.5.16;
 
 import "./CTokenInterfaces.sol";
 
+//代理合约，Proxy Contract
 /**
  * @title Compound's CErc20Delegator Contract
  * @notice CTokens which wrap an EIP-20 underlying and delegate to an implementation
@@ -10,15 +11,15 @@ import "./CTokenInterfaces.sol";
 contract CErc20Delegator is CTokenInterface, CErc20Interface, CDelegatorInterface {
     /**
      * @notice Construct a new money market
-     * @param underlying_ The address of the underlying asset
-     * @param comptroller_ The address of the Comptroller
-     * @param interestRateModel_ The address of the interest rate model
+     * @param underlying_ The address of the underlying asset   标的资产合约
+     * @param comptroller_ The address of the Comptroller   审计合约
+     * @param interestRateModel_ The address of the interest rate model 利率模型合约
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
-     * @param admin_ Address of the administrator of this token
-     * @param implementation_ The address of the implementation the contract delegates to
+     * @param admin_ Address of the administrator of this token 管理者
+     * @param implementation_ The address of the implementation the contract delegates to   实际的逻辑合约
      * @param becomeImplementationData The encoded args for becomeImplementation
      */
     constructor(address underlying_,
@@ -34,6 +35,7 @@ contract CErc20Delegator is CTokenInterface, CErc20Interface, CDelegatorInterfac
         // Creator of the contract is admin during initialization
         admin = msg.sender;
 
+        // 调用逻辑合约的initialize，进行初始化，这里的逻辑合约是CToken
         // First delegate gets to initialize the delegator (i.e. storage contract)
         delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,address,uint256,string,string,uint8)",
                                                             underlying_,
@@ -65,8 +67,10 @@ contract CErc20Delegator is CTokenInterface, CErc20Interface, CDelegatorInterfac
         }
 
         address oldImplementation = implementation;
+        // 设置新的逻辑合约地址
         implementation = implementation_;
 
+        // 调用逻辑合约的_becomeImplementation(bytes)方法
         delegateToImplementation(abi.encodeWithSignature("_becomeImplementation(bytes)", becomeImplementationData));
 
         emit NewImplementation(oldImplementation, implementation);

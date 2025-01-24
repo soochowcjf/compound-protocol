@@ -8,6 +8,7 @@ contract InterestRateModel {
     /// @notice Indicator that this is an InterestRateModel contract (for inspection)
     bool public constant isInterestRateModel = true;
 
+    // 借款利率，这里是区块利率
     /**
       * @notice Calculates the current borrow interest rate per block
       * @param cash The total amount of cash the market has
@@ -17,6 +18,7 @@ contract InterestRateModel {
       */
     function getBorrowRate(uint cash, uint borrows, uint reserves) external view returns (uint);
 
+//    存款利率，这里是区块利率
     /**
       * @notice Calculates the current supply interest rate per block
       * @param cash The total amount of cash the market has

@@ -2,6 +2,7 @@ pragma solidity ^0.5.16;
 
 import "./CErc20.sol";
 
+// 逻辑合约，Logic Contract
 /**
  * @title Compound's CErc20Delegate Contract
  * @notice CTokens which wrap an EIP-20 underlying and are delegated to
