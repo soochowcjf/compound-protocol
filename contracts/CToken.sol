@@ -300,6 +300,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return (MathError.NO_ERROR, 0);
         }
 
+//        这一段时间内的本金和利息，其实就是用户借的钱*当前的累计借款利率/上一次计息时的累计借款利率
         /* Calculate new borrow balance using the interest index:
          *  recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
          */
@@ -350,6 +351,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
              */
             return (MathError.NO_ERROR, initialExchangeRateMantissa);
         } else {
+//            兑换率= （totalCash为存入该market且没被借走的A币总值+总借款-cToken收取的手续费）/总供应量
             /*
              * Otherwise:
              *  exchangeRate = (totalCash + totalBorrows - totalReserves) / totalSupply
@@ -398,7 +400,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return uint(Error.NO_ERROR);
         }
 
-//        获取[这个合约地址]中[标的资产]的token数量
+//        获取[这个合约地址]中[标的资产]的token数量，假设是抵押eth借u，那么标的资产就是u
         /* Read the previous values out of storage */
         uint cashPrior = getCashPrior();
 //        该市场标的未偿还借款总数
@@ -432,27 +434,28 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint totalReservesNew;
         uint borrowIndexNew;
 
-//        计算从上次计息到当前时刻的区间利率，时间上就是 borrowRateMantissa*blockDelta
+//        计算从上次计息到当前时刻的区间利率，实际上就是 borrowRateMantissa*blockDelta
+//        这里为什么这个算法成立，假设年利率R，区块利率则为r=R/blocksPerYear，（1+r）^δt ≈ 1 + δt*r
         (mathErr, simpleInterestFactor) = mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_SIMPLE_INTEREST_FACTOR_CALCULATION_FAILED, uint(mathErr));
         }
-
+// 已借款*利率
         (mathErr, interestAccumulated) = mulScalarTruncate(simpleInterestFactor, borrowsPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_ACCUMULATED_INTEREST_CALCULATION_FAILED, uint(mathErr));
         }
-
+// 当前总借款=之前的总借款+之前总借款*利率
         (mathErr, totalBorrowsNew) = addUInt(interestAccumulated, borrowsPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_BORROWS_CALCULATION_FAILED, uint(mathErr));
         }
-
+// 当前的总储备金=之前的总储备金+借款利息*储备金占比
         (mathErr, totalReservesNew) = mulScalarTruncateAddUInt(Exp({mantissa: reserveFactorMantissa}), interestAccumulated, reservesPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_RESERVES_CALCULATION_FAILED, uint(mathErr));
         }
-
+// 当前的累计利率 上一个borrowIndexPrior*（1+simpleInterestFactor）
         (mathErr, borrowIndexNew) = mulScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_BORROW_INDEX_CALCULATION_FAILED, uint(mathErr));
@@ -461,7 +464,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
-
+// 更新计算的值
         /* We write the previously calculated values into storage */
         accrualBlockNumber = currentBlockNumber;
         borrowIndex = borrowIndexNew;
@@ -474,6 +477,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         return uint(Error.NO_ERROR);
     }
 
+//    存入标的资产
     /**
      * @notice Sender supplies assets into the market and receives cTokens in exchange
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
@@ -481,6 +485,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @return (uint, uint) An error code (0=success, otherwise a failure, see ErrorReporter.sol), and the actual mint amount.
      */
     function mintInternal(uint mintAmount) internal nonReentrant returns (uint, uint) {
+//        进行累计计息
         uint error = accrueInterest();
         if (error != uint(Error.NO_ERROR)) {
             // accrueInterest emits logs on errors, but we still want to log the fact that an attempted borrow failed
@@ -500,6 +505,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint actualMintAmount;
     }
 
+//    存入u
     /**
      * @notice User supplies assets into the market and receives cTokens in exchange
      * @dev Assumes interest has already been accrued up to the current block
@@ -521,6 +527,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         MintLocalVars memory vars;
 
+//        计算兑换率，比如: u/cToken
         (vars.mathErr, vars.exchangeRateMantissa) = exchangeRateStoredInternal();
         if (vars.mathErr != MathError.NO_ERROR) {
             return (failOpaque(Error.MATH_ERROR, FailureInfo.MINT_EXCHANGE_RATE_READ_FAILED, uint(vars.mathErr)), 0);
@@ -538,13 +545,14 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
          *  in case of a fee. On success, the cToken holds an additional `actualMintAmount`
          *  of cash.
          */
+//        将标的资产转入到这个合约，数量mintAmount
         vars.actualMintAmount = doTransferIn(minter, mintAmount);
 
         /*
          * We get the current exchange rate and calculate the number of cTokens to be minted:
          *  mintTokens = actualMintAmount / exchangeRate
          */
-
+// 根据兑换率转入相应的cToken给用户
         (vars.mathErr, vars.mintTokens) = divScalarByExpTruncate(vars.actualMintAmount, Exp({mantissa: vars.exchangeRateMantissa}));
         require(vars.mathErr == MathError.NO_ERROR, "MINT_EXCHANGE_CALCULATION_FAILED");
 
@@ -637,6 +645,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /* If redeemTokensIn > 0: */
         if (redeemTokensIn > 0) {
+//            根据兑换率兑换出相应的u
             /*
              * We calculate the exchange rate and the amount of underlying to be redeemed:
              *  redeemTokens = redeemTokensIn
@@ -698,6 +707,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
+//        将u转给用户
         /*
          * We invoke doTransferOut for the redeemer and the redeemAmount.
          *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
@@ -708,6 +718,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /* We write previously calculated values into storage */
         totalSupply = vars.totalSupplyNew;
+//        扣减用户的cToken
         accountTokens[redeemer] = vars.accountTokensNew;
 
         /* We emit a Transfer event, and a Redeem event */
@@ -720,6 +731,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         return uint(Error.NO_ERROR);
     }
 
+//    借款
     /**
       * @notice Sender borrows assets from the protocol to their own address
       * @param borrowAmount The amount of the underlying asset to borrow
@@ -748,6 +760,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
     function borrowFresh(address payable borrower, uint borrowAmount) internal returns (uint) {
+//        判断抵押的标的资产是否能够借这么多钱
         /* Fail if borrow not allowed */
         uint allowed = comptroller.borrowAllowed(address(this), borrower, borrowAmount);
         if (allowed != 0) {
@@ -790,6 +803,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
+//        转入相应的u给借款者
         /*
          * We invoke doTransferOut for the borrower and the borrowAmount.
          *  Note: The cToken must handle variations between ERC-20 and ETH underlying.

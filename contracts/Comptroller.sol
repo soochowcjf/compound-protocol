@@ -735,6 +735,7 @@ contract Comptroller is ComptrollerV6Storage, ComptrollerInterface, ComptrollerE
             vars.collateralFactor = Exp({mantissa: markets[address(asset)].collateralFactorMantissa});
             vars.exchangeRate = Exp({mantissa: vars.exchangeRateMantissa});
 
+//            通过价格预言机获取标的资产的市场价格
             // Get the normalized price of the asset
             vars.oraclePriceMantissa = oracle.getUnderlyingPrice(asset);
             if (vars.oraclePriceMantissa == 0) {
@@ -742,9 +743,11 @@ contract Comptroller is ComptrollerV6Storage, ComptrollerInterface, ComptrollerE
             }
             vars.oraclePrice = Exp({mantissa: vars.oraclePriceMantissa});
 
+//            抵押因子*兑换率*市场价格
             // Pre-compute a conversion factor from tokens -> ether (normalized price value)
             vars.tokensToDenom = mul_(mul_(vars.collateralFactor, vars.exchangeRate), vars.oraclePrice);
 
+//            抵押标的资产后的cToken总数量*抵押因子（例如0.75）*市场价格*兑换率
             // sumCollateral += tokensToDenom * cTokenBalance
             vars.sumCollateral = mul_ScalarTruncateAddUInt(vars.tokensToDenom, vars.cTokenBalance, vars.sumCollateral);
 
